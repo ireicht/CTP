@@ -84,6 +84,8 @@ public class DicomStorageSCU {
 	private PresContext pc = null;
 
 	private boolean forceClose;
+	private int currentDCMObjectsInAssoziation = 0; //cnt dcm objects of current transfer, set to 0 after each close
+	private int maxDCMObjsInAssoziation = 500;
     private int hostTag = 0;
     private int portTag = 0;
     private int calledAETTag = 0;
@@ -164,6 +166,7 @@ public class DicomStorageSCU {
 			currentTSUID = null;
 			pc = null;
 			lastTransmissionTime = 0;
+			currentDCMObjectsInAssoziation = 0;
 		}
 	}
 
@@ -225,6 +228,9 @@ public class DicomStorageSCU {
 				//if the active association does not exist or if it has been closed by the other end, then YES
 				(active == null) || (active.getAssociation().getState() != Association.ASSOCIATION_ESTABLISHED) ||
 
+				// if max number of obj per association has been transferred
+				(currentDCMObjectsInAssoziation >= maxDCMObjsInAssoziation) ||
+				
 				//if the transfer syntax has changed, then YES
 				(currentTSUID == null) || !tsUID.equals(currentTSUID) ||
 
@@ -295,10 +301,19 @@ public class DicomStorageSCU {
 			Dimse response = active.invoke(request).get();
 			int status = response.getCommand().getStatus();
 			if (forceClose) close();
+			//
+			// if transferred amount of my defined max. objects, then close
+			// if (myLimit <= objectsTransferredInCurrentAssoziation) close();
+			//
 			if (status == 0) {
 				lastFailureMessageTime = 0;
 				lastTransmissionTime = System.currentTimeMillis();
 				logger.debug("...transmission succeeded; returning Status.OK");
+				// 
+				// increment transferredDCMObjectsInCurrentAssoziation
+				currentDCMObjectsInAssoziation++;
+				logger.info("cntCurrentObjects: "+Integer.toString(currentDCMObjectsInAssoziation));
+				//
 				return Status.OK;
 			}
 			else { 
